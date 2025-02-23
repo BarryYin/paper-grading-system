@@ -1,15 +1,20 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { usePaperStore } from "@/store/paper-store"
 
 export default function Result() {
+  const { paperContent } = usePaperStore()
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-center mb-8">评分结果</h1>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="border rounded-lg p-4 overflow-auto h-[calc(100vh-200px)]">
           <h2 className="text-xl font-semibold mb-4">论文内容</h2>
-          <p>这里是上传论文的内容。在实际应用中，这里会显示用户上传的论文全文。</p>
-          {/* 这里可以添加更多的模拟论文内容 */}
+          <pre className="whitespace-pre-wrap font-mono text-sm">
+            {paperContent || "暂无内容，请先上传论文文件。"}
+          </pre>
         </div>
         <div className="border rounded-lg p-4 overflow-auto h-[calc(100vh-200px)]">
           <h2 className="text-xl font-semibold mb-4">评分与建议</h2>
