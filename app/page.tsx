@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FileUploadButton } from "@/components/FileUploadButton"
 
+import PaperTitleList from '@/components/PaperTitleList';
+
 export default function Home() {
   return (
     <div className="container mx-auto px-4 py-8">
@@ -24,6 +26,9 @@ export default function Home() {
             <li>文件上传后，系统将自动分析您的论文</li>
             <li>分析完成后，您将被重定向到结果页面</li>
           </ol>
+        </div>
+        <div className="mt-8">
+          <PaperTitleList />
         </div>
         <div className="mt-8 text-center">
           <Link href="/result">
