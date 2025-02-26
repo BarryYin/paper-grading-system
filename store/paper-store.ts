@@ -16,9 +16,11 @@ interface PaperSubmission {
 
 interface PaperStore {
   paperContent: string;
+  recordId: string | null;
   submissions: PaperSubmission[];
   currentSubmission: PaperSubmission | null;
   setPaperContent: (content: string) => void;
+  setRecordId: (id: string) => void;
   submitPaper: (content: string) => Promise<string>;
   loadSubmissionHistory: () => Promise<void>;
   getSubmissionResult: (id: string) => Promise<void>;
@@ -26,8 +28,11 @@ interface PaperStore {
 
 export const usePaperStore = create<PaperStore>((set) => ({
   paperContent: '',
+  recordId: null,
   submissions: [],
   currentSubmission: null,
+
+  setRecordId: (id) => set({ recordId: id }),
 
   setPaperContent: (content) => set({ paperContent: content }),
 

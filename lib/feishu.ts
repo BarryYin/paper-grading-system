@@ -26,13 +26,17 @@ export class FeishuService {
     this.baseUrl = 'http://localhost:8000'
   }
 
-  async submitPaper(content: string): Promise<string> {
+  async submitPaper(content: string, file?: File): Promise<string> {
+    let formData = new FormData();
+    formData.append('content', content);
+    
+    if (file) {
+      formData.append('file', file);
+    }
+
     const response = await fetch(`${this.baseUrl}/api/submissions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ content }),
+      body: formData,
     })
 
     if (!response.ok) {
