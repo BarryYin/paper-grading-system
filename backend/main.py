@@ -37,6 +37,9 @@ class PaperSubmission(BaseModel):
     论文采用论证方法: Optional[str] = None
     附件上传: Optional[List[dict]] = None
     附件内容摘要: Optional[str] = None
+    论文论证逻辑完整分析: Optional[str] = None
+    论文结构完整分析: Optional[str] = None
+    论文研究方法完整分析: Optional[str] = None
 
 class SubmitPaperRequest(BaseModel):
     content: str
@@ -51,6 +54,14 @@ class FeishuService:
             .build()
         self.app_token = "EizAbvZvxaTrKlsiumGcXLBuneb"
         self.table_id = "tblIlSF9KydXg612"
+
+    def get_tenant_access_token(self):
+        request = lark.auth.v3.TenantAccessTokenRequest.builder()\
+            .build()
+        response = self.client.auth.v3.tenant_access_token.create(request)
+        if not response.success():
+            raise HTTPException(status_code=500, detail="Failed to get tenant access token")
+        return response.data.tenant_access_token
 
     async def get_submission_history(self) -> List[PaperSubmission]:
         request = lark.bitable.v1.ListAppTableRecordRequest.builder()\
@@ -81,8 +92,17 @@ class FeishuService:
                     论文论证逻辑修改意见=item.fields.get("论文论证逻辑修改意见"),
                     论文论证逻辑得分=item.fields.get("论文论证逻辑得分"),
                     论文采用论证方法=item.fields.get("论文采用论证方法"),
-                    附件上传=item.fields.get("附件上传", []),
-                    附件内容摘要=item.fields.get("附件内容摘要")
+                    附件上传=[
+                        {
+                            "name": file.get("name", ""),
+                            "url": f"{file.get('url', '')}?tenant_access_token={self.get_tenant_access_token()}"
+                        }
+                        for file in item.fields.get("附件上传", [])
+                    ],
+                    附件内容摘要=item.fields.get("附件内容摘要"),
+                    论文论证逻辑完整分析=item.fields.get("论文论证逻辑完整分析"),
+                    论文结构完整分析=item.fields.get("论文结构完整分析"),
+                    论文研究方法完整分析=item.fields.get("论文研究方法完整分析")
                 )
                 submissions.append(submission)
             return submissions
@@ -91,21 +111,6 @@ class FeishuService:
             error_msg = f"Failed to fetch submission history: {str(e)}"
             print(f"Exception: {error_msg}")
             raise HTTPException(status_code=500, detail=error_msg)
-
-        submissions = []
-        for item in response.data.items:
-            submission = PaperSubmission(
-                id=item.record_id,
-                论文标题=item.fields.get("论文标题", "无标题"),
-                content=item.fields.get("content", ""),
-                status=item.fields.get("status", "pending"),
-                result=item.fields.get("result"),
-                created_at=item.fields.get("created_at", ""),
-                attachment=item.fields.get("attachment", [])
-            )
-            submissions.append(submission)
-
-        return submissions
 
     async def submit_paper(self, content: str) -> str:
         request = lark.bitable.v1.CreateAppTableRecordRequest.builder()\
@@ -124,7 +129,12 @@ class FeishuService:
                     "论文论证逻辑修改意见": "",
                     "论文论证逻辑得分": "",
                     "论文采用论证方法": "",
-                    "附件内容摘要": ""
+                    "附件内容摘要": "",
+                    "附件上传": [],
+                    "论文论证逻辑完整分析": "",
+                    "论文结构完整分析": "",
+                    "论文研究方法完整分析": "",
+
                 }
             ))\
             .build()
@@ -160,8 +170,17 @@ class FeishuService:
             论文论证逻辑修改意见=record.fields.get("论文论证逻辑修改意见"),
             论文论证逻辑得分=record.fields.get("论文论证逻辑得分"),
             论文采用论证方法=record.fields.get("论文采用论证方法"),
-            附件上传=record.fields.get("附件上传", []),
-            附件内容摘要=record.fields.get("附件内容摘要")
+            附件上传=[
+                {
+                    "name": file.get("name", ""),
+                    "url": f"{file.get('url', '')}?tenant_access_token={self.get_tenant_access_token()}"
+                }
+                for file in record.fields.get("附件上传", [])
+            ],
+            附件内容摘要=record.fields.get("附件内容摘要"),
+            论文论证逻辑完整分析=record.fields.get("论文论证逻辑完整分析"),
+            论文结构完整分析=record.fields.get("论文结构完整分析"),
+            论文研究方法完整分析=record.fields.get("论文研究方法完整分析")
         )
 
 feishu_service = FeishuService()

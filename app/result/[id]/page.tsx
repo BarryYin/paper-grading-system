@@ -1,18 +1,55 @@
 'use client';
 
-import { useEffect } from 'react';
-import { usePaperStore } from '@/store/paper-store';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+interface Submission {
+  id: string;
+  论文标题?: string;
+  文档核心内容?: string;
+  附件上传?: Array<{ name: string; url: string }>;
+  论文研究方法得分?: string;
+  论文研究方法完整分析?: string;
+  论文结构得分?: string;
+  论文结构完整分析?: string;
+  论文论证逻辑得分?: string;
+  论文论证逻辑完整分析?: string;
+}
+
 export default function PaperResult({ params }: { params: { id: string } }) {
-  const { currentSubmission, getSubmissionResult } = usePaperStore();
+  const [currentSubmission, setCurrentSubmission] = useState<Submission | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getSubmissionResult(params.id);
-  }, [params.id, getSubmissionResult]);
+    const fetchSubmission = async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/submissions/${params.id}`);
+        if (!response.ok) {
+          throw new Error('获取论文详情失败');
+        }
+        const data = await response.json();
+        setCurrentSubmission(data.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '未知错误');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSubmission();
+  }, [params.id]);
+
+  if (loading) {
+    return <div className="container mx-auto py-8">加载中...</div>;
+  }
+
+  if (error) {
+    return <div className="container mx-auto py-8 text-red-500">{error}</div>;
+  }
 
   if (!currentSubmission) {
-    return <div className="container mx-auto py-8">加载中...</div>;
+    return <div className="container mx-auto py-8">未找到论文</div>;
   }
 
   return (
@@ -22,17 +59,25 @@ export default function PaperResult({ params }: { params: { id: string } }) {
         <div>
           <Card>
             <CardHeader>
-              <CardTitle>{currentSubmission.title}</CardTitle>
+              <CardTitle>{currentSubmission.论文标题 || '无标题'}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="whitespace-pre-wrap mb-4">
-                {currentSubmission.content}
+                {/* 文档核心内容 */}
+                {currentSubmission.文档核心内容 && (
+                  <div>
+                    <p className="font-semibold">文档核心内容：</p>
+                    <p className="whitespace-pre-wrap">{currentSubmission.文档核心内容}</p>
+                  </div>
+                )}
               </div>
-              {currentSubmission.attachment && currentSubmission.attachment.length > 0 && (
+            </CardContent>
+            <CardContent>
+              {currentSubmission.附件上传 && currentSubmission.附件上传.length > 0 && (
                 <div className="mt-4">
                   <h3 className="font-semibold mb-2">附件：</h3>
                   <ul className="space-y-2">
-                    {currentSubmission.attachment.map((file, index) => (
+                    {currentSubmission.附件上传.map((file, index) => (
                       <li key={index}>
                         <a
                           href={file.url}
@@ -43,7 +88,7 @@ export default function PaperResult({ params }: { params: { id: string } }) {
                           {file.name}
                         </a>
                       </li>
-                    ))}
+                    ))}                  
                   </ul>
                 </div>
               )}
@@ -64,7 +109,7 @@ export default function PaperResult({ params }: { params: { id: string } }) {
                   <div>
                     <p className="font-semibold">研究方法评分：</p>
                     <p className="whitespace-pre-wrap">{currentSubmission.论文研究方法得分}</p>
-                    <p className="text-sm text-gray-600 mt-1">{currentSubmission.论文研究方法修改意见}</p>
+                    <p className="text-sm text-gray-600 mt-1">{currentSubmission.论文研究方法完整分析}</p>
                   </div>
                 )}
                 
@@ -73,7 +118,7 @@ export default function PaperResult({ params }: { params: { id: string } }) {
                   <div>
                     <p className="font-semibold">论文结构评分：</p>
                     <p className="whitespace-pre-wrap">{currentSubmission.论文结构得分}</p>
-                    <p className="text-sm text-gray-600 mt-1">{currentSubmission.论文结构修改意见}</p>
+                    <p className="text-sm text-gray-600 mt-1">{currentSubmission.论文结构完整分析}</p>
                   </div>
                 )}
 
@@ -82,23 +127,7 @@ export default function PaperResult({ params }: { params: { id: string } }) {
                   <div>
                     <p className="font-semibold">论证逻辑评分：</p>
                     <p className="whitespace-pre-wrap">{currentSubmission.论文论证逻辑得分}</p>
-                    <p className="text-sm text-gray-600 mt-1">{currentSubmission.论文论证逻辑修改意见}</p>
-                  </div>
-                )}
-
-                {/* 论文结论 */}
-                {currentSubmission.论文结论 && (
-                  <div>
-                    <p className="font-semibold">论文结论：</p>
-                    <p className="whitespace-pre-wrap">{currentSubmission.论文结论}</p>
-                  </div>
-                )}
-
-                {/* 论文采用论证方法 */}
-                {currentSubmission.论文采用论证方法 && (
-                  <div>
-                    <p className="font-semibold">采用的论证方法：</p>
-                    <p className="whitespace-pre-wrap">{currentSubmission.论文采用论证方法}</p>
+                    <p className="text-sm text-gray-600 mt-1">{currentSubmission.论文论证逻辑完整分析}</p>
                   </div>
                 )}
               </div>
