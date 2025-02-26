@@ -29,7 +29,7 @@ export default function PaperResult({ params }: { params: { id: string } }) {
           throw new Error('获取论文详情失败');
         }
         const data = await response.json();
-        setCurrentSubmission(data.data);
+        setCurrentSubmission(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : '未知错误');
       } finally {

@@ -55,13 +55,6 @@ class FeishuService:
         self.app_token = "EizAbvZvxaTrKlsiumGcXLBuneb"
         self.table_id = "tblIlSF9KydXg612"
 
-    def get_tenant_access_token(self):
-        request = lark.auth.v3.TenantAccessTokenRequest.builder()\
-            .build()
-        response = self.client.auth.v3.tenant_access_token.create(request)
-        if not response.success():
-            raise HTTPException(status_code=500, detail="Failed to get tenant access token")
-        return response.data.tenant_access_token
 
     async def get_submission_history(self) -> List[PaperSubmission]:
         request = lark.bitable.v1.ListAppTableRecordRequest.builder()\
@@ -95,7 +88,7 @@ class FeishuService:
                     附件上传=[
                         {
                             "name": file.get("name", ""),
-                            "url": f"{file.get('url', '')}?tenant_access_token={self.get_tenant_access_token()}"
+                            "url": file.get('url', '')
                         }
                         for file in item.fields.get("附件上传", [])
                     ],
@@ -173,7 +166,7 @@ class FeishuService:
             附件上传=[
                 {
                     "name": file.get("name", ""),
-                    "url": f"{file.get('url', '')}?tenant_access_token={self.get_tenant_access_token()}"
+                    "url": file.get('url', '')
                 }
                 for file in record.fields.get("附件上传", [])
             ],

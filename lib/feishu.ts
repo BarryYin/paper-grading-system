@@ -27,7 +27,7 @@ export class FeishuService {
   }
 
   async submitPaper(content: string): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/api/feishu`, {
+    const response = await fetch(`${this.baseUrl}/api/submissions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -40,11 +40,11 @@ export class FeishuService {
     }
 
     const data = await response.json()
-    return data.recordId
+    return data.data.recordId
   }
 
   async getSubmissionResult(recordId: string): Promise<PaperSubmission | null> {
-    const response = await fetch(`${this.baseUrl}/api/feishu?recordId=${recordId}`)
+    const response = await fetch(`${this.baseUrl}/api/submissions/${recordId}`)
 
     if (!response.ok) {
       if (response.status === 404) {
