@@ -23,6 +23,5 @@ export default function RootLayout({
   )
 }
 
-
-
-import './globals.css'
+// 确保导入全局样式
+import './globals.css';

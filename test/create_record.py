@@ -59,9 +59,9 @@ def main():
                 # "文档核心内容": "这是一个通过Python API创建的新记录内容",
                 # "论文标题": "测试标题"
                 "附件上传": [{
-                    "name": "沈lala开题目录.docx",
+                    "name": "新上传文件",
                     "type": "file",
-                    "file_token": upload_file(client, "/Users/mac/Documents/GitHub/paper-grading-system/沈lala开题目录.docx")
+                    "file_token": upload_file(client, "/Users/mac/Documents/GitHub/paper-grading-system/谢益林开题报告71204407381-终版.doc")
                 }]
             })
             .build()) \

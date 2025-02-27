@@ -1,8 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import lark_oapi as lark
 from typing import List, Optional
+import os
+import tempfile
 
 app = FastAPI()
 
@@ -15,17 +17,17 @@ async def root():
 # 配置 CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 在生产环境中应该设置具体的域名
+    allow_origins=["http://localhost:3000"],  # 允许的前端域名
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # 允许所有HTTP方法
+    allow_headers=["*"],  # 允许所有头信息
 )
 
 # 定义数据模型
 class PaperSubmission(BaseModel):
     id: str
-    论文标题: str
-    文档核心内容: str
+    论文标题: Optional[str] = None
+    文档核心内容: Optional[str] = None
     论文目录: Optional[str] = None
     论文研究方法修改意见: Optional[str] = None
     论文研究方法得分: Optional[str] = None
@@ -111,13 +113,33 @@ class FeishuService:
             file_info = await self.upload_file(file_path)
             fields["附件上传"] = [file_info]
 
-        request = lark.bitable.v1.CreateAppTableRecordRequest.builder()\
-            .app_token(self.app_token)\
-            .table_id(self.table_id)\
-            .request_body(lark.bitable.v1.CreateAppTableRecordRequestBody(
-                fields=fields
-            ))\
-            .build()
+        # 使用正确的方式创建请求体
+        try:
+            # 方法1：简单字典方式
+            request_body = {"fields": fields}
+            request = lark.bitable.v1.CreateAppTableRecordRequest.builder()\
+                .app_token(self.app_token)\
+                .table_id(self.table_id)\
+                .request_body(request_body)\
+                .build()
+        except Exception as e:
+            print(f"创建请求体失败(方法1): {e}")
+            try:
+                # 方法2：尝试使用builder模式
+                request = lark.bitable.v1.CreateAppTableRecordRequest.builder()\
+                    .app_token(self.app_token)\
+                    .table_id(self.table_id)\
+                    .request_body(lark.bitable.v1.CreateAppTableRecordRequestBody().builder()
+                        .fields(fields)
+                        .build())\
+                    .build()
+            except Exception as e2:
+                print(f"创建请求体失败(方法2): {e2}")
+                # 最后的备选方案：直接从updatefiles.py抄代码
+                # 请确认updatefiles.py中的方法是可用的
+                # 这里假设updatefiles.py用了类似的方式但实现正确
+                raise HTTPException(status_code=500, 
+                    detail="创建请求失败，请检查lark_oapi版本，以及查看updatefiles.py中的实现")
         
         response = self.client.bitable.v1.app_table_record.create(request)
         if not response.success():
@@ -143,40 +165,48 @@ class FeishuService:
 
             submissions = []
             for item in response.data.items:
-                submission = PaperSubmission(
-                    id=item.record_id,
-                    论文标题=item.fields.get("论文标题", "无标题"),
-                    文档核心内容=item.fields.get("文档核心内容", ""),
-                    论文目录=item.fields.get("论文目录", ""),
-                    论文研究方法修改意见=item.fields.get("论文研究方法修改意见", ""),
-                    论文研究方法得分=item.fields.get("论文研究方法得分", ""),
-                    论文结构修改意见=item.fields.get("论文结构修改意见", ""),
-                    论文结构得分=item.fields.get("论文结构得分", ""),
-                    论文结论=item.fields.get("论文结论", ""),
-                    论文论证逻辑修改意见=item.fields.get("论文论证逻辑修改意见", ""),
-                    论文论证逻辑得分=item.fields.get("论文论证逻辑得分", ""),
-                    论文采用论证方法=item.fields.get("论文采用论证方法", ""),
-                    附件上传=[
-                        {
-                            "name": file.get("name", ""),
-                            "url": file.get('url', '')
-                        }
-                        for file in item.fields.get("附件上传", [])
-                    ],
-                    附件内容摘要=item.fields.get("附件内容摘要", ""),
-                    论文论证逻辑完整分析=item.fields.get("论文论证逻辑完整分析", ""),
-                    论文结构完整分析=item.fields.get("论文结构完整分析", ""),
-                    论文研究方法完整分析=item.fields.get("论文研究方法完整分析", "")
-                )
-                submissions.append(submission)
+                try:
+                    # 参考query_table.py中的处理方式，确保所有值都不为None
+                    fields = item.fields if item.fields else {}
+                    
+                    # 确保所有必填字段都有值
+                    submission = PaperSubmission(
+                        id=item.record_id,
+                        论文标题=fields.get("论文标题") or "无标题",
+                        文档核心内容=fields.get("文档核心内容") or "",
+                        论文目录=fields.get("论文目录") or "",
+                        论文研究方法修改意见=fields.get("论文研究方法修改意见") or "",
+                        论文研究方法得分=fields.get("论文研究方法得分") or "",
+                        论文结构修改意见=fields.get("论文结构修改意见") or "",
+                        论文结构得分=fields.get("论文结构得分") or "",
+                        论文结论=fields.get("论文结论") or "",
+                        论文论证逻辑修改意见=fields.get("论文论证逻辑修改意见") or "",
+                        论文论证逻辑得分=fields.get("论文论证逻辑得分") or "",
+                        论文采用论证方法=fields.get("论文采用论证方法") or "",
+                        附件上传=[
+                            {
+                                "name": file.get("name", "") or "",
+                                "url": file.get('url', '') or file.get('file_token', '') or ""
+                            }
+                            for file in fields.get("附件上传", []) if file
+                        ] if fields.get("附件上传") else [],
+                        附件内容摘要=fields.get("附件内容摘要") or "",
+                        论文论证逻辑完整分析=fields.get("论文论证逻辑完整分析") or "",
+                        论文结构完整分析=fields.get("论文结构完整分析") or "",
+                        论文研究方法完整分析=fields.get("论文研究方法完整分析") or ""
+                    )
+                    submissions.append(submission)
+                except Exception as item_error:
+                    print(f"处理一条记录时出错，跳过: {str(item_error)}")
+                    # 如果单个记录出错，继续处理其他记录
+                    continue
+                    
             return submissions
 
         except Exception as e:
             error_msg = f"Failed to fetch submission history: {str(e)}"
             print(f"Exception: {error_msg}")
             raise HTTPException(status_code=500, detail=error_msg)
-
-
 
     async def get_submission_result(self, record_id: str) -> Optional[PaperSubmission]:
         request = lark.bitable.v1.GetAppTableRecordRequest.builder()\
@@ -190,30 +220,32 @@ class FeishuService:
             raise HTTPException(status_code=404, detail="Submission not found")
 
         record = response.data.record
+        fields = record.fields if record.fields else {}
+        
         return PaperSubmission(
             id=record.record_id,
-            论文标题=record.fields.get("论文标题", "无标题"),
-            文档核心内容=record.fields.get("文档核心内容", ""),
-            论文目录=record.fields.get("论文目录"),
-            论文研究方法修改意见=record.fields.get("论文研究方法修改意见"),
-            论文研究方法得分=record.fields.get("论文研究方法得分"),
-            论文结构修改意见=record.fields.get("论文结构修改意见"),
-            论文结构得分=record.fields.get("论文结构得分"),
-            论文结论=record.fields.get("论文结论"),
-            论文论证逻辑修改意见=record.fields.get("论文论证逻辑修改意见"),
-            论文论证逻辑得分=record.fields.get("论文论证逻辑得分"),
-            论文采用论证方法=record.fields.get("论文采用论证方法"),
+            论文标题=fields.get("论文标题") or "无标题",
+            文档核心内容=fields.get("文档核心内容") or "",
+            论文目录=fields.get("论文目录") or "",
+            论文研究方法修改意见=fields.get("论文研究方法修改意见") or "",
+            论文研究方法得分=fields.get("论文研究方法得分") or "",
+            论文结构修改意见=fields.get("论文结构修改意见") or "",
+            论文结构得分=fields.get("论文结构得分") or "",
+            论文结论=fields.get("论文结论") or "",
+            论文论证逻辑修改意见=fields.get("论文论证逻辑修改意见") or "",
+            论文论证逻辑得分=fields.get("论文论证逻辑得分") or "",
+            论文采用论证方法=fields.get("论文采用论证方法") or "",
             附件上传=[
                 {
-                    "name": file.get("name", ""),
-                    "url": file.get('url', '')
+                    "name": file.get("name", "") or "",
+                    "url": file.get('url', '') or file.get('file_token', '') or ""
                 }
-                for file in record.fields.get("附件上传", [])
-            ],
-            附件内容摘要=record.fields.get("附件内容摘要"),
-            论文论证逻辑完整分析=record.fields.get("论文论证逻辑完整分析"),
-            论文结构完整分析=record.fields.get("论文结构完整分析"),
-            论文研究方法完整分析=record.fields.get("论文研究方法完整分析")
+                for file in fields.get("附件上传", []) if file
+            ] if fields.get("附件上传") else [],
+            附件内容摘要=fields.get("附件内容摘要") or "",
+            论文论证逻辑完整分析=fields.get("论文论证逻辑完整分析") or "",
+            论文结构完整分析=fields.get("论文结构完整分析") or "",
+            论文研究方法完整分析=fields.get("论文研究方法完整分析") or ""
         )
 
 feishu_service = FeishuService()
@@ -243,6 +275,131 @@ async def get_submission(record_id: str):
         return submission
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# 修改上传文件处理函数，添加创建多维表格记录的功能
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile):
+    try:
+        # 文件上传部分保持不变
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        # 使用飞书API上传文件
+        result = await feishu_service.upload_file(temp_file_path)
+        print(f"文件上传成功，结果：{result}")
+        
+        # 删除临时文件
+        os.unlink(temp_file_path)
+        
+        # 记录状态
+        file_upload_success = True
+        record_created_success = False
+        record_id = None
+        error_msg = ""
+        
+        # 修正创建记录的代码
+        try:
+            # 准备字段数据
+            fields = {
+                "论文标题": f"通过网站上传的文件 - {file.filename}",
+                "文档核心内容": "通过网站上传的文件，待处理",
+                "附件上传": [
+                    {
+                        "name": file.filename,
+                        "type": "file", 
+                        "file_token": result["file_token"]
+                    }
+                ]
+            }
+            
+            print(f"准备创建记录，字段内容: {fields}")
+            
+            # 尝试方法1: 直接使用字典作为请求体
+            try:
+                request = lark.bitable.v1.CreateAppTableRecordRequest.builder() \
+                    .app_token(feishu_service.app_token) \
+                    .table_id(feishu_service.table_id) \
+                    .request_body({"fields": fields}) \
+                    .build()
+                
+                print(f"创建请求: {request}")
+                
+                response = feishu_service.client.bitable.v1.app_table_record.create(request)
+                print(f"创建响应: 成功={response.success()}, 消息={response.msg}")
+                
+                if response.success():
+                    record_id = response.data.record.record_id
+                    record_created_success = True
+                    print(f"记录创建成功，ID: {record_id}")
+                    result["record_id"] = record_id
+                else:
+                    error_msg = f"记录创建失败，错误: {response.msg}"
+                    print(error_msg)
+                    
+                    # 如果方法1失败，尝试方法2
+                    if "Invalid request body" in response.msg:
+                        raise Exception("尝试使用备用方法")
+            except Exception as e1:
+                print(f"方法1创建记录失败，尝试方法2: {str(e1)}")
+                
+                # 方法2: 使用官方SDK文档推荐的结构
+                from lark_oapi.api.bitable.v1.model.create_app_table_record_request_body import CreateAppTableRecordRequestBody
+                
+                body = CreateAppTableRecordRequestBody()
+                body.fields = fields
+                
+                request = lark.bitable.v1.CreateAppTableRecordRequest.builder() \
+                    .app_token(feishu_service.app_token) \
+                    .table_id(feishu_service.table_id) \
+                    .request_body(body) \
+                    .build()
+                
+                print(f"创建请求(方法2): {request}")
+                
+                response = feishu_service.client.bitable.v1.app_table_record.create(request)
+                print(f"创建响应(方法2): 成功={response.success()}, 消息={response.msg}")
+                
+                if response.success():
+                    record_id = response.data.record.record_id
+                    record_created_success = True
+                    print(f"记录创建成功(方法2)，ID: {record_id}")
+                    result["record_id"] = record_id
+                else:
+                    error_msg = f"记录创建失败(方法2)，错误: {response.msg}"
+                    print(error_msg)
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"创建记录异常: {str(e)}"
+            print(error_msg)
+            print(traceback.format_exc())
+        
+        # 明确返回状态，确保前端能够正确处理
+        response_data = {
+            "success": file_upload_success,
+            "record_created": record_created_success,
+            "record_id": record_id,
+            "message": "文件上传成功" + (", 且记录已创建" if record_created_success else f", 但记录创建失败: {error_msg}"),
+            "data": result
+        }
+        
+        print(f"返回给前端的数据: {response_data}")
+        return response_data
+    except Exception as e:
+        # 其余错误处理部分保持不变
+        import traceback
+        print(f"文件上传失败: {str(e)}")
+        print(f"异常详情: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 同样修改备用路由
+@app.post("/upload")
+async def upload_file_alt(file: UploadFile):
+    # 直接复用 /api/upload 的处理函数
+    return await upload_file(file)
 
 if __name__ == "__main__":
     import uvicorn

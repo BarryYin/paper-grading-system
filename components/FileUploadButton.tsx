@@ -1,127 +1,133 @@
-"use client"
+'use client';
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
-import { toast } from "sonner"
-import { usePaperStore } from "@/store/paper-store"
-import mammoth from "mammoth"
+import React, { useState, useRef } from 'react';
+import { Button, message } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
 
-export function FileUploadButton() {
-  const router = useRouter()
-  const [isUploading, setIsUploading] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [syncStatus, setSyncStatus] = useState('')
+interface FileUploadButtonProps {
+  onFileUploaded?: (fileInfo: {
+    name: string;
+    url: string;
+    type: string;
+    recordId?: string;
+  }) => void;
+  disabled?: boolean;
+}
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+const FileUploadButton: React.FC<FileUploadButtonProps> = ({ 
+  onFileUploaded = () => {},
+  disabled = false
+}) => {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setUploading(true);
     try {
-      setIsUploading(true)
-      setUploadProgress(0)
-      setSyncStatus('正在读取文件...')
+      // 显示上传中消息
+      const loadingMessage = message.loading('正在上传文件...', 0);
       
-      let content = '';
-      if (file.name.endsWith('.docx')) {
-        const arrayBuffer = await file.arrayBuffer();
-        setUploadProgress(30);
-        setSyncStatus('正在解析文档...');
-        const result = await mammoth.extractRawText({ arrayBuffer });
-        content = result.value;
-      } else {
-        content = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = reject;
-          reader.onprogress = (e) => {
-            if (e.lengthComputable) {
-              setUploadProgress(Math.round((e.loaded / e.total) * 30));
-            }
-          };
-          reader.readAsText(file);
-        });
-      }
-
-      setUploadProgress(50);
-      setSyncStatus('正在同步到服务器...');
+      // 上传过程有两种选择:
       
-      const response = await fetch('/api/submissions', {
+      // 方法1: 使用 /api/upload API 先上传文件，然后文本内容
+      // 这种方法适合二进制文件，因为后端需要处理文件上传
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const uploadResponse = await fetch('http://localhost:8000/api/upload', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content })
+        body: formData,
       });
-
-      if (!response.ok) {
-        throw new Error('上传失败');
-      }
-
-      const data = await response.json();
-      const recordId = data.data.recordId;
-      usePaperStore.getState().setPaperContent(content);
-      usePaperStore.getState().setRecordId(recordId);
       
-      setUploadProgress(100);
-      setIsSuccess(true);
-      toast.success("论文上传成功！");
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.detail || '文件上传失败');
+      }
+      
+      const result = await uploadResponse.json();
+      
+      // 关闭loading消息
+      loadingMessage();
+      
+      console.log("文件上传返回结果:", result);
+      
+      // 区分文件上传和记录创建两个阶段
+      if (result.success) {
+        // 文件上传成功
+        
+        if (result.record_created && result.record_id) {
+          // 文件上传和记录创建都成功
+          message.success('文件上传成功，论文记录已创建！');
+          
+          // 将文件信息传递给父组件
+          onFileUploaded({
+            name: file.name,
+            url: result.record_id, // 使用记录ID作为URL
+            type: file.type,
+            recordId: result.record_id
+          });
+          
+          console.log('记录创建成功，ID:', result.record_id);
+        } else {
+          // 文件上传成功，但记录创建失败
+          console.warn('记录创建失败详情:', result.message);
+          
+          // 显示更详细的错误信息
+          message.warning(`文件已上传，但记录创建失败。原因: ${result.message || '未知错误'}`);
+          
+          // 仍然传递文件信息
+          onFileUploaded({
+            name: file.name,
+            url: result.data?.url || result.data?.file_token || "",
+            type: file.type
+          });
+        }
+      } else {
+        throw new Error(result.message || '上传失败');
+      }
     } catch (error) {
-      console.error('文件处理失败:', error);
-      toast.error("上传失败，请确保文件格式正确并重试");
-      setUploadProgress(0);
+      console.error('文件上传失败:', error);
+      message.error(`上传失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
-      setIsUploading(false);
-      setSyncStatus('');
+      setUploading(false);
+      // 重置文件输入以允许再次上传同一文件
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
-  }
+  };
 
-  const goToAnalysis = () => {
-    const recordId = usePaperStore.getState().recordId
-    if (recordId) {
-      router.push(`/result/${recordId}`)
-    } else {
-      toast.error("获取论文ID失败，请重试")
-    }
-  }
+  const handleClick = () => {
+    fileInputRef.current?.click();
+  };
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-md">
-      <Input
-        id="file-upload"
-        type="file"
-        className="hidden"
-        accept=".pdf,.doc,.docx"
-        onChange={handleFileUpload}
-        disabled={isUploading}
-      />
-      <Button
-        onClick={() => document.getElementById("file-upload")?.click()}
-        disabled={isUploading}
-        className="w-full"
+    <div className="file-upload-button">
+      <Button 
+        icon={<UploadOutlined />} 
+        onClick={handleClick}
+        loading={uploading}
+        disabled={disabled || uploading}
       >
-        {isUploading ? "上传中..." : "选择文件"}
+        {uploading ? '上传中...' : '上传附件'}
       </Button>
-      
-      {isUploading && (
-        <div className="w-full space-y-2">
-          <Progress value={uploadProgress} className="w-full" />
-          <p className="text-sm text-center text-muted-foreground">{syncStatus}</p>
-        </div>
-      )}
-      
-      {isSuccess && (
-        <Button
-          onClick={goToAnalysis}
-          disabled={!isSuccess}
-          className="w-full"
-        >
-          查看分析结果
-        </Button>
-      )}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
+        accept=".pdf,.doc,.docx,.txt"
+      />
+      <style jsx>{`
+        .file-upload-button {
+          margin-bottom: 16px;
+        }
+      `}</style>
     </div>
-  )
-}
+  );
+};
+
+export default FileUploadButton;
