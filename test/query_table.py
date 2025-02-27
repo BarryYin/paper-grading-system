@@ -36,29 +36,33 @@ def main():
 
     # 处理业务结果
     submissions = []
-    for item in response.data.items:
-        submission = PaperSubmission(
-            id=item.record_id,
-            论文标题=item.fields.get("论文标题", "无标题"),
-            文档核心内容=item.fields.get("文档核心内容", ""),
-            论文目录=item.fields.get("论文目录"),
-            论文研究方法修改意见=item.fields.get("论文研究方法修改意见"),
-            论文研究方法得分=item.fields.get("论文研究方法得分"),
-            论文结构修改意见=item.fields.get("论文结构修改意见"),
-            论文结构得分=item.fields.get("论文结构得分"),
-            论文结论=item.fields.get("论文结论"),
-            论文论证逻辑修改意见=item.fields.get("论文论证逻辑修改意见"),
-            论文论证逻辑得分=item.fields.get("论文论证逻辑得分"),
-            论文采用论证方法=item.fields.get("论文采用论证方法"),
-            附件上传=item.fields.get("附件上传", []),
-            附件内容摘要=item.fields.get("附件内容摘要")
-        )
-        submissions.append(submission)
-        print(f"\n记录 {submission.id}:")
-        print(f"论文标题: {submission.论文标题}")
-        print(f"文档核心内容: {submission.文档核心内容}")
-        if submission.论文目录:
-            print(f"论文目录: {submission.论文目录}")
+    if response.data and response.data.items:
+        for item in response.data.items:
+            submission = PaperSubmission(
+                id=item.record_id,
+                论文标题=item.fields.get("论文标题", "无标题"),
+                文档核心内容=item.fields.get("文档核心内容", ""),
+                论文目录=item.fields.get("论文目录", ""),
+                论文研究方法修改意见=item.fields.get("论文研究方法修改意见", ""),
+                论文研究方法得分=item.fields.get("论文研究方法得分", ""),
+                论文结构修改意见=item.fields.get("论文结构修改意见", ""),
+                论文结构得分=item.fields.get("论文结构得分", ""),
+                论文结论=item.fields.get("论文结论", ""),
+                论文论证逻辑修改意见=item.fields.get("论文论证逻辑修改意见", ""),
+                论文论证逻辑得分=item.fields.get("论文论证逻辑得分", ""),
+                论文采用论证方法=item.fields.get("论文采用论证方法", ""),
+                附件上传=item.fields.get("附件上传", []),
+                附件内容摘要=item.fields.get("附件内容摘要", ""),
+                论文论证逻辑完整分析=item.fields.get("论文论证逻辑完整分析", ""),
+                论文结构完整分析=item.fields.get("论文结构完整分析", ""),
+                论文研究方法完整分析=item.fields.get("论文研究方法完整分析", "")
+            )
+            submissions.append(submission)
+            print(f"\n记录 {submission.id}:")
+            print(f"论文标题: {submission.论文标题}")
+            print(f"文档核心内容: {submission.文档核心内容}")
+            if submission.论文目录:
+                print(f"论文目录: {submission.论文目录}")
 
     print(f"\n共获取到 {len(submissions)} 条记录")
 
