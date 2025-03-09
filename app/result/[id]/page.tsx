@@ -24,7 +24,9 @@ export default function PaperResult({ params }: { params: { id: string } }) {
   useEffect(() => {
     const fetchSubmission = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/submissions/${params.id}`);
+        const response = await fetch(`http://localhost:8000/api/submissions/${params.id}`, {
+          credentials: 'include', // 添加credentials选项，确保发送cookie
+        });
         if (!response.ok) {
           throw new Error('获取论文详情失败');
         }

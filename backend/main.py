@@ -1,12 +1,17 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import lark_oapi as lark
 from typing import List, Optional
 import os
 import tempfile
+from .auth import get_current_user, require_user, User
+from .auth_routes import router as auth_router
 
 app = FastAPI()
+
+# 添加认证路由
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
 from fastapi.responses import RedirectResponse
 
@@ -14,13 +19,15 @@ from fastapi.responses import RedirectResponse
 async def root():
     return RedirectResponse(url="/docs")
 
-# 配置 CORS
+# 配置 CORS - 确保这段代码在创建所有路由之前
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # 允许的前端域名
-    allow_credentials=True,
-    allow_methods=["*"],  # 允许所有HTTP方法
-    allow_headers=["*"],  # 允许所有头信息
+    allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],  # 只允许特定的前端源
+    allow_credentials=True,  # 允许跨域请求携带凭证（cookies）
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # 明确指定允许的方法
+    allow_headers=["Content-Type", "Authorization", "Accept", "Cookie"],  # 明确指定允许的请求头
+    expose_headers=["Set-Cookie"],  # 暴露Set-Cookie响应头
+    max_age=3600,  # 预检请求结果缓存时间
 )
 
 # 定义数据模型
@@ -170,9 +177,14 @@ class FeishuService:
                     fields = item.fields if item.fields else {}
                     
                     # 确保所有必填字段都有值
+                    title = fields.get("论文标题") or "处理中"
+                    # 如果标题包含"无标题信息可提取"或"无明确标题信息"，则显示为"处理中"
+                    if title and ("无标题信息可提取" in title or "无明确标题信息" in title):
+                        title = "处理中"
+                    
                     submission = PaperSubmission(
                         id=item.record_id,
-                        论文标题=fields.get("论文标题") or "无标题",
+                        论文标题=title,
                         文档核心内容=fields.get("文档核心内容") or "",
                         论文目录=fields.get("论文目录") or "",
                         论文研究方法修改意见=fields.get("论文研究方法修改意见") or "",
@@ -222,9 +234,14 @@ class FeishuService:
         record = response.data.record
         fields = record.fields if record.fields else {}
         
+        title = fields.get("论文标题") or "无标题"
+        # 如果标题包含"无标题信息可提取"或"无明确标题信息"，则显示为"处理中"
+        if title and ("无标题信息可提取" in title or "无明确标题信息" in title):
+            title = "处理中"
+        
         return PaperSubmission(
             id=record.record_id,
-            论文标题=fields.get("论文标题") or "无标题",
+            论文标题=title,
             文档核心内容=fields.get("文档核心内容") or "",
             论文目录=fields.get("论文目录") or "",
             论文研究方法修改意见=fields.get("论文研究方法修改意见") or "",
@@ -251,10 +268,33 @@ class FeishuService:
 feishu_service = FeishuService()
 
 @app.get("/api/submissions")
-async def get_submissions():
+async def get_submissions(page: int = 1, page_size: int = 8):
     try:
+        # 获取所有提交记录
         submissions = await feishu_service.get_submission_history()
-        return {"data": submissions}
+        
+        # 按ID倒序排列（假设ID越大表示越新的提交）
+        submissions.sort(key=lambda x: x.id, reverse=True)
+        
+        # 计算分页信息
+        total = len(submissions)
+        total_pages = (total + page_size - 1) // page_size
+        
+        # 获取当前页的数据
+        start = (page - 1) * page_size
+        end = min(start + page_size, total)
+        current_page_data = submissions[start:end]
+        
+        # 返回带有分页信息的响应
+        return {
+            "data": current_page_data,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages
+            }
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -304,7 +344,7 @@ async def upload_file(file: UploadFile):
         try:
             # 准备字段数据
             fields = {
-                "论文标题": f"通过网站上传的文件 - {file.filename}",
+                "论文标题": "处理中",
                 "文档核心内容": "通过网站上传的文件，待处理",
                 "附件上传": [
                     {
@@ -382,7 +422,7 @@ async def upload_file(file: UploadFile):
             "success": file_upload_success,
             "record_created": record_created_success,
             "record_id": record_id,
-            "message": "文件上传成功" + (", 且记录已创建" if record_created_success else f", 但记录创建失败: {error_msg}"),
+            "message": "文件上传成功" + (", 且记录已创建。论文正在进行评审，预计时间为1-2分钟，请在论文列表中查看详细结论" if record_created_success else f", 但记录创建失败: {error_msg}"),
             "data": result
         }
         

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import { Button, message } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import React, { useState, useRef, useEffect } from 'react';
+import { Button, message, Modal, Progress } from 'antd';
+import { UploadOutlined, ReloadOutlined, LoginOutlined } from '@ant-design/icons';
 
 interface FileUploadButtonProps {
   onFileUploaded?: (fileInfo: {
@@ -19,7 +19,32 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
   disabled = false
 }) => {
   const [uploading, setUploading] = useState(false);
+  const [showCountdown, setShowCountdown] = useState(false);
+  const [countdown, setCountdown] = useState(30);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 处理倒计时逻辑
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    
+    if (showCountdown && countdown > 0) {
+      timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+    } else if (showCountdown && countdown === 0) {
+      // 倒计时结束，刷新页面
+      window.location.reload();
+    }
+    
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [showCountdown, countdown]);
+
+  // 强制刷新页面
+  const handleForceRefresh = () => {
+    window.location.reload();
+  };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -40,6 +65,7 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
       const uploadResponse = await fetch('http://localhost:8000/api/upload', {
         method: 'POST',
         body: formData,
+        credentials: 'include', // 添加credentials选项，确保发送cookie
       });
       
       if (!uploadResponse.ok) {
@@ -71,6 +97,10 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
           });
           
           console.log('记录创建成功，ID:', result.record_id);
+          
+          // 启动倒计时
+          setShowCountdown(true);
+          setCountdown(30);
         } else {
           // 文件上传成功，但记录创建失败
           console.warn('记录创建失败详情:', result.message);
@@ -110,7 +140,7 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
         icon={<UploadOutlined />} 
         onClick={handleClick}
         loading={uploading}
-        disabled={disabled || uploading}
+        disabled={disabled || uploading || showCountdown}
       >
         {uploading ? '上传中...' : '上传附件'}
       </Button>
@@ -121,6 +151,31 @@ const FileUploadButton: React.FC<FileUploadButtonProps> = ({
         style={{ display: 'none' }}
         accept=".pdf,.doc,.docx,.txt"
       />
+      
+      {/* 倒计时模态框 */}
+      <Modal
+        title="论文评审进行中"
+        open={showCountdown}
+        closable={false}
+        maskClosable={false}
+        footer={[
+          <Button 
+            key="refresh" 
+            type="primary" 
+            icon={<ReloadOutlined />} 
+            onClick={handleForceRefresh}
+          >
+            立即刷新
+          </Button>
+        ]}
+      >
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <p>论文正在进行评审，预计时间为1-2分钟，请耐心等待</p>
+          <p>页面将在 <span style={{ fontWeight: 'bold', fontSize: '18px', color: '#1890ff' }}>{countdown}</span> 秒后自动刷新</p>
+          <Progress percent={Math.round(((30 - countdown) / 30) * 100)} status="active" />
+        </div>
+      </Modal>
+      
       <style jsx>{`
         .file-upload-button {
           margin-bottom: 16px;

@@ -1,0 +1,37 @@
+.submission-list-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.pagination-container {
+  margin: 30px 0;
+}
+
+.ant-pagination {
+  display: flex;
+  justify-content: center;
+}
+
+.ant-pagination-item {
+  background-color: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 2px;
+  outline: none;
+  transition: all 0.3s;
+}
+
+.ant-pagination-item-active {
+  border-color: #1890ff;
+  font-weight: 500;
+}
+
+.ant-pagination-item:focus,
+.ant-pagination-item:hover {
+  border-color: #1890ff;
+}
+
+.ant-pagination-item-active:focus,
+.ant-pagination-item-active:hover {
+  border-color: #40a9ff;
+}
