@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>论文链接测试页</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .link-item { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+        button { padding: 5px 10px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>论文链接测试页</h1>
+    <p>点击以下链接测试论文详情页访问：</p>
+    
+    <div class="link-item">
+        <h3>receDrtyx8 - 机器学习在自然语言处理中的应用</h3>
+        <button onclick="window.location.href='/submissions/receDrtyx8'">标准链接</button>
+        <button onclick="window.location.href='/submissions/receDrtyx8/index.html'">直接HTML</button>
+        <button onclick="window.open('/api/submissions/receDrtyx8', '_blank')">直接API</button>
+    </div>
+
+    <div class="link-item">
+        <h3>recuEG6Z8QuOWy - 区块链技术在供应链管理中的应用</h3>
+        <button onclick="window.location.href='/submissions/recuEG6Z8QuOWy'">标准链接</button>
+        <button onclick="window.open('/api/submissions/recuEG6Z8QuOWy', '_blank')">直接API</button>
+    </div>
+
+    <div class="link-item">
+        <h3>recPFmvHG1 - 可持续发展与绿色能源技术</h3>
+        <button onclick="window.location.href='/submissions/recPFmvHG1'">标准链接</button>
+        <button onclick="window.open('/api/submissions/recPFmvHG1', '_blank')">直接API</button>
+    </div>
+
+    <div class="link-item">
+        <h3>测试链接</h3>
+        <p>测试前端基础路由</p>
+        <button onclick="window.location.href='/'">首页</button>
+        <button onclick="window.location.href='/submissions'">论文列表</button>
+    </div>
+
+    <div class="link-item">
+        <h3>API状态检查</h3>
+        <button onclick="checkApi()">检查API状态</button>
+        <div id="api-result"></div>
+    </div>
+
+    <script>
+        function checkApi() {
+            document.getElementById('api-result').innerHTML = '检查中...';
+            fetch('http://localhost:8000/api/health')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('api-result').innerHTML = 
+                        '<p style="color:green">API正常运行: ' + JSON.stringify(data) + '</p>';
+                })
+                .catch(err => {
+                    document.getElementById('api-result').innerHTML = 
+                        '<p style="color:red">API连接失败: ' + err.message + '</p>';
+                });
+        }
+    </script>
+</body>
+</html>
