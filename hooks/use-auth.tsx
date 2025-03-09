@@ -194,6 +194,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         if (data.token) {
           localStorage.setItem('auth_token', data.token);
         }
+        
+        // 登录成功后刷新页面
+        window.location.reload();
         return true;
       }
       
@@ -231,6 +234,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (data.token) {
         localStorage.setItem('auth_token', data.token);
       }
+      
+      // 登录成功后刷新页面
+      window.location.reload();
       return true;
     } catch (error) {
       console.error('调试登录失败:', error);
@@ -302,11 +308,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       // 不管API响应如何，都清除本地状态
       clearAuthState();
+      
+      // 登出后刷新页面
+      window.location.reload();
       return true;
     } catch (error) {
       console.error('登出失败:', error);
       // 即使请求失败也清除本地状态
       clearAuthState();
+      
+      // 登出后刷新页面
+      window.location.reload();
       return true;
     }
   };

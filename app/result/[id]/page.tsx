@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface Submission {
@@ -17,6 +18,7 @@ interface Submission {
 }
 
 export default function PaperResult({ params }: { params: { id: string } }) {
+  const router = useRouter();
   const [currentSubmission, setCurrentSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export default function PaperResult({ params }: { params: { id: string } }) {
   useEffect(() => {
     const fetchSubmission = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/submissions/${params.id}`, {
+        const response = await fetch(`/api/submissions/${params.id}`, {
           credentials: 'include', // 添加credentials选项，确保发送cookie
         });
         if (!response.ok) {
@@ -56,6 +58,17 @@ export default function PaperResult({ params }: { params: { id: string } }) {
 
   return (
     <div className="container mx-auto py-8">
+      {/* 返回按钮 */}
+      <button 
+        onClick={() => router.back()}
+        className="mb-4 flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        返回上一页
+      </button>
+      
       <div className="grid grid-cols-2 gap-8">
         {/* 左侧：论文内容和附件 */}
         <div>

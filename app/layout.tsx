@@ -34,7 +34,7 @@ export default function RootLayout({
             {children}
           </main>
           <Toaster />
-          {isDevelopment && <DebugPanel />}
+          {/* 调试面板已被隐藏 */}
         </AuthProvider>
       </body>
     </html>
