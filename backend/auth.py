@@ -3,171 +3,286 @@ import csv
 import uuid
 import hashlib
 import time
-from datetime import datetime
-from typing import Optional, Dict, List, Tuple
-from fastapi import HTTPException, Depends, Cookie, Request
+import json
+from datetime import datetime, timedelta
+from typing import Optional, Dict, List, Tuple, Any
+from fastapi import HTTPException, Depends, Request, status
 from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel
 
-# 用户CSV文件路径
-USERS_FILE = os.path.join(os.path.dirname(__file__), 'users.csv')
+# 导入必要的模块
+try:
+    from passlib.context import CryptContext
+    import jwt
+except ImportError as e:
+    module_name = str(e).split("'")[-2]
+    raise ImportError(
+        f"缺少必要的依赖项: {module_name}。请运行 'python install_dependencies.py' 安装所有依赖，"
+        f"或者手动执行 'pip install passlib[bcrypt] python-jose[cryptography]'"
+    ) from e
 
-# 确保用户文件存在
-def ensure_users_file_exists():
-    if not os.path.exists(USERS_FILE):
-        with open(USERS_FILE, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['user_id', 'username', 'password_hash', 'email', 'created_at'])
+# 路径设置
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+USERS_FILE = os.path.join(BACKEND_DIR, 'users.csv')
+SESSIONS_FILE = os.path.join(BACKEND_DIR, 'sessions.json')
 
-# 密码哈希函数
-def hash_password(password: str) -> str:
-    # 使用SHA-256进行简单哈希，实际应用中应使用更安全的方法如bcrypt
-    return hashlib.sha256(password.encode()).hexdigest()
+# 加密设置
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+SECRET_KEY = os.environ.get("SECRET_KEY", "your-secret-key-for-jwt")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7天
 
 # 用户模型
-class User:
-    def __init__(self, user_id: str, username: str, password_hash: str, email: str, created_at: str):
-        self.user_id = user_id
-        self.username = username
-        self.password_hash = password_hash
-        self.email = email
-        self.created_at = created_at
+class User(BaseModel):
+    user_id: str
+    username: str
+    email: Optional[str] = None
+    disabled: Optional[bool] = None
 
-# 会话文件路径
-SESSIONS_FILE = os.path.join(os.path.dirname(__file__), 'sessions.json')
-
-# 确保会话文件存在
-def ensure_sessions_file_exists():
+# 确保文件存在
+def ensure_files_exist():
+    # 确保用户文件存在
+    if not os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['user_id', 'username', 'password_hash', 'email', 'created_at'])
+            print(f"创建新用户文件: {USERS_FILE}")
+    
+    # 确保会话文件存在
     if not os.path.exists(SESSIONS_FILE):
-        with open(SESSIONS_FILE, 'w') as f:
+        with open(SESSIONS_FILE, 'w', encoding='utf-8') as f:
             f.write('{}')
+            print(f"创建新会话文件: {SESSIONS_FILE}")
 
-# 用户认证服务
-class AuthService:
-    def __init__(self):
-        ensure_users_file_exists()
-        ensure_sessions_file_exists()
-        # 从文件加载会话
-        self.sessions: Dict[str, Dict] = self._load_sessions()
+# 添加测试用户
+def ensure_test_users_exist():
+    users = get_all_users()
+    usernames = {user['username'] for user in users}
     
-    def _load_sessions(self) -> Dict[str, Dict]:
-        try:
-            import json
-            with open(SESSIONS_FILE, 'r') as f:
-                sessions = json.load(f)
-                # 过滤掉已过期的会话
-                current_time = time.time()
-                sessions = {sid: session for sid, session in sessions.items() 
-                           if session.get('expires', 0) > current_time}
-                return sessions
-        except Exception as e:
-            print(f"加载会话数据出错: {e}")
-            return {}
-    
-    def _save_sessions(self):
-        try:
-            import json
-            with open(SESSIONS_FILE, 'w') as f:
-                json.dump(self.sessions, f)
-        except Exception as e:
-            print(f"保存会话数据出错: {e}")
-            # 继续执行，不中断用户操作
-    
-    def register_user(self, username: str, password: str, email: str) -> User:
-        # 检查用户名是否已存在
-        existing_users = self.get_all_users()
-        if any(user.username == username for user in existing_users):
-            raise HTTPException(status_code=400, detail="用户名已存在")
-        
-        # 创建新用户
-        user_id = str(uuid.uuid4())
-        password_hash = hash_password(password)
-        created_at = datetime.now().isoformat()
-        
-        # 保存到CSV - 确保正确处理换行符
-        try:
-            with open(USERS_FILE, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow([user_id, username, password_hash, email, created_at])
-                f.flush()  # 确保数据立即写入文件
-        except Exception as e:
-            print(f"保存用户数据时出错: {e}")
-            raise HTTPException(status_code=500, detail=f"用户数据保存失败: {str(e)}")
-        
-        return User(user_id, username, password_hash, email, created_at)
-    
-    def login(self, username: str, password: str) -> Tuple[User, str]:
-        # 验证用户
-        users = self.get_all_users()
-        user = next((u for u in users if u.username == username), None)
-        
-        if not user or user.password_hash != hash_password(password):
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
-        
-        # 创建会话
-        session_id = str(uuid.uuid4())
-        self.sessions[session_id] = {
-            "user_id": user.user_id,
-            "username": user.username,
-            "expires": time.time() + 86400  # 24小时过期
+    test_users = [
+        {
+            'user_id': 'test-id-123',
+            'username': 'test',
+            'password': 'test',
+            'email': 'test@example.com',
+        },
+        {
+            'user_id': 'admin-id-456',
+            'username': 'admin', 
+            'password': 'admin',
+            'email': 'admin@example.com',
         }
-        
-        # 保存会话到文件
-        self._save_sessions()
-        
-        return user, session_id
+    ]
     
-    def get_current_user(self, session_id: Optional[str]) -> Optional[User]:
-        if not session_id or session_id not in self.sessions:
-            return None
-        
-        session = self.sessions[session_id]
-        
-        # 检查会话是否过期
-        if session["expires"] < time.time():
-            del self.sessions[session_id]
-            # 保存会话变更到文件
-            self._save_sessions()
-            return None
-        
-        # 刷新会话过期时间（延长会话有效期）
-        session["expires"] = time.time() + 86400  # 重置为24小时
-        self._save_sessions()
-        
-        # 获取用户信息
-        users = self.get_all_users()
-        return next((u for u in users if u.user_id == session["user_id"]), None)
-    
-    def logout(self, session_id: str) -> bool:
-        if session_id in self.sessions:
-            del self.sessions[session_id]
-            # 保存会话变更到文件
-            self._save_sessions()
+    for test_user in test_users:
+        if test_user['username'] not in usernames:
+            # 创建用户
+            create_user(
+                test_user['username'],
+                test_user['email'],
+                test_user['password'],
+                user_id=test_user['user_id']
+            )
+            print(f"添加测试用户: {test_user['username']}")
+
+# 确保文件存在
+ensure_files_exist()
+
+# 密码处理函数
+def get_password_hash(password: str) -> str:
+    """使用安全的哈希方法处理密码"""
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """验证密码是否匹配哈希值"""
+    # 尝试使用passlib验证
+    try:
+        if pwd_context.verify(plain_password, hashed_password):
             return True
-        return False
+    except Exception as e:
+        print(f"bcrypt验证失败，尝试SHA256: {e}")
     
-    def get_all_users(self) -> List[User]:
-        users = []
-        try:
-            with open(USERS_FILE, 'r', newline='') as f:
-                reader = csv.reader(f)
-                next(reader)  # 跳过标题行
-                for row in reader:
-                    if len(row) >= 5:
-                        users.append(User(row[0], row[1], row[2], row[3], row[4]))
-        except Exception as e:
-            print(f"读取用户文件出错: {e}")
-        return users
+    # 备选方案：使用SHA256验证
+    sha256_hash = hashlib.sha256(plain_password.encode()).hexdigest()
+    return sha256_hash == hashed_password
 
-# 创建认证服务实例
-auth_service = AuthService()
+# 用户管理函数
+def get_all_users() -> List[Dict[str, Any]]:
+    """获取所有用户数据"""
+    users = []
+    try:
+        with open(USERS_FILE, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                users.append(dict(row))
+    except Exception as e:
+        print(f"读取用户文件出错: {e}")
+    return users
 
-# 依赖项：获取当前用户
+def get_user(username: str) -> Optional[Dict[str, Any]]:
+    """通过用户名查找用户"""
+    users = get_all_users()
+    for user in users:
+        if user['username'] == username:
+            return user
+    return None
+
+def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    """通过ID查找用户"""
+    users = get_all_users()
+    for user in users:
+        if user['user_id'] == user_id:
+            return user
+    return None
+
+def authenticate_user(username: str, password: str) -> Optional[User]:
+    """验证用户凭据并返回用户信息"""
+    print(f"尝试验证用户: {username}")
+    
+    user = get_user(username)
+    if not user:
+        print(f"用户 {username} 不存在")
+        return None
+    
+    print(f"找到用户: {username}")
+    if verify_password(password, user['password_hash']):
+        print("密码验证成功")
+        return User(
+            user_id=user['user_id'],
+            username=user['username'],
+            email=user['email'],
+            disabled=False  # 默认未禁用
+        )
+    
+    print("密码验证失败")
+    return None
+
+def create_user(username: str, email: str, password: str, user_id: str = None) -> Optional[User]:
+    """创建新用户"""
+    # 检查用户是否已存在
+    if get_user(username):
+        print(f"用户名 {username} 已存在")
+        return None
+    
+    # 生成用户ID (如果未提供)
+    if not user_id:
+        user_id = str(uuid.uuid4())
+    
+    # 创建时间
+    created_at = datetime.now().isoformat()
+    
+    # 密码哈希
+    password_hash = get_password_hash(password)
+    
+    # 写入CSV文件
+    try:
+        with open(USERS_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([user_id, username, password_hash, email, created_at])
+            print(f"成功创建用户: {username}")
+        
+        # 返回用户对象
+        return User(
+            user_id=user_id,
+            username=username,
+            email=email,
+            disabled=False
+        )
+    except Exception as e:
+        print(f"创建用户失败: {e}")
+        return None
+
+# 会话和令牌管理
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """创建JWT访问令牌"""
+    to_encode = data.copy()
+    
+    # 设置过期时间
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    
+    to_encode.update({"exp": expire})
+    
+    # 编码令牌
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# FastAPI依赖项
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token")
+
+async def get_current_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
+    """从JWT令牌获取当前用户"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+    
+    user_data = get_user(username)
+    if user_data is None:
+        raise credentials_exception
+    
+    return User(
+        user_id=user_data['user_id'],
+        username=user_data['username'],
+        email=user_data['email'],
+        disabled=False  # 默认未禁用
+    )
+
 async def get_current_user(request: Request) -> Optional[User]:
-    session_id = request.cookies.get("session_id")
-    return auth_service.get_current_user(session_id)
+    """从请求中获取当前用户(基于令牌或cookie)"""
+    # 从认证头获取令牌
+    auth_header = request.headers.get("Authorization", "")
+    token = None
+    
+    # 提取令牌
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    else:
+        # 从cookie尝试获取令牌
+        token_cookie = request.cookies.get("access_token", "")
+        if token_cookie and token_cookie.startswith("Bearer "):
+            token = token_cookie.split(" ")[1]
+    
+    if not token:
+        return None
+    
+    # 验证令牌
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            return None
+        
+        # 获取用户数据
+        user_data = get_user(username)
+        if user_data:
+            return User(
+                user_id=user_data['user_id'],
+                username=user_data['username'],
+                email=user_data['email'],
+                disabled=False  # 默认未禁用
+            )
+    except jwt.PyJWTError:
+        return None
+    
+    return None
 
-# 依赖项：要求用户已登录
-async def require_user(current_user: User = Depends(get_current_user)):
+async def require_user(current_user: Optional[User] = Depends(get_current_user)) -> User:
+    """要求用户已登录"""
     if not current_user:
-        raise HTTPException(status_code=401, detail="请先登录")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return current_user
+
+# 添加测试用户
+ensure_test_users_exist()

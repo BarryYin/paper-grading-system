@@ -5,8 +5,9 @@ import lark_oapi as lark
 from typing import List, Optional
 import os
 import tempfile
-from .auth import get_current_user, require_user, User
-from .auth_routes import router as auth_router
+# 修改相对导入为绝对导入
+from auth import get_current_user, require_user, User
+from auth_routes import router as auth_router
 
 app = FastAPI()
 
@@ -19,15 +20,14 @@ from fastapi.responses import RedirectResponse
 async def root():
     return RedirectResponse(url="/docs")
 
-# 配置 CORS - 确保这段代码在创建所有路由之前
+# 修改CORS配置，确保cookies能正常工作
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],  # 只允许特定的前端源
-    allow_credentials=True,  # 允许跨域请求携带凭证（cookies）
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # 明确指定允许的方法
-    allow_headers=["Content-Type", "Authorization", "Accept", "Cookie"],  # 明确指定允许的请求头
-    expose_headers=["Set-Cookie"],  # 暴露Set-Cookie响应头
-    max_age=3600,  # 预检请求结果缓存时间
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # 允许的前端源
+    allow_credentials=True,  # 允许cookies
+    allow_methods=["*"],  # 允许所有方法
+    allow_headers=["*"],  # 允许所有头
+    expose_headers=["Set-Cookie"],  # 确保前端可以看到Set-Cookie头
 )
 
 # 定义数据模型

@@ -5,6 +5,7 @@ import { Inter } from "next/font/google"
 import AuthComponents from "@/components/AuthComponents"
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from "@/hooks/use-auth"
+import DebugPanel from "@/components/debug-panel"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -19,6 +20,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
   return (
     <html lang="zh" suppressHydrationWarning>
       <body className={inter.className}>
@@ -31,10 +34,11 @@ export default function RootLayout({
             {children}
           </main>
           <Toaster />
+          {isDevelopment && <DebugPanel />}
         </AuthProvider>
       </body>
     </html>
-  )
+  );
 }
 
 // 确保导入全局样式
