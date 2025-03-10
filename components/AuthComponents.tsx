@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 
 interface User {
   user_id: string;
@@ -20,6 +21,7 @@ interface AuthComponentsProps {
 }
 
 const AuthComponents: React.FC<AuthComponentsProps> = ({ onAuthChange }) => {
+  const router = useRouter();
   const { isAuthenticated, user, loading, login, register: registerUser, logout } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('login');
@@ -117,6 +119,7 @@ const AuthComponents: React.FC<AuthComponentsProps> = ({ onAuthChange }) => {
           description: "您已成功退出登录",
         });
         if (onAuthChange) onAuthChange(false);
+        window.location.href = '/'; // 强制刷新并跳转首页
       } else {
         toast({
           title: "登出失败",
